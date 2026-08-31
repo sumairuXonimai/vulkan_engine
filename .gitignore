@@ -1,0 +1,41 @@
+# Build directories
+/build/
+/bin/
+/out/
+/src/samples/
+/target/
+CMakeCache.txt
+CMakeFiles/
+CMakeScripts/
+Makefile
+cmake_install.cmake
+*.cmake
+
+# Visual Studio
+/.vs/
+*.vcxproj
+*.vcxproj.filters
+*.vcxproj.user
+*.sln
+*.suo
+*.user
+*.opendb
+
+# Compiled Shaders & Asset Caches
+*.spv
+*.cache
+/assets/textures/generated/
+
+# Operating System Files
+.DS_Store
+Thumbs.db
+ehthumbs.db
+desktop.ini
+$RECYCLE.BIN/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
