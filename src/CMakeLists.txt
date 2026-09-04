@@ -1,42 +1,31 @@
 
 # Add source to this project's executable.
-add_executable (engine 
-  main.cpp
-  vk_types.h
-  vk_initializers.cpp
-  vk_initializers.h
-  vk_images.h
-  vk_images.cpp 
-  vk_descriptors.h
-  vk_descriptors.cpp
-  vk_pipelines.h
-  vk_pipelines.cpp
-  vk_engine.h
-  vk_engine.cpp
-  vk_loader.h
-  vk_loader.cpp
-  vk_mesh.h
-  vk_mesh.cpp
-  vk_pushbuffer.h
-  vk_pushbuffer.cpp
-  vk_profiler.h
-  #vk_scene.h
-  #vk_scene.cpp
-  #vk_textures.h
-  #vk_textures.cpp
-  vk_engine_scenerender.cpp
-  material_system.h
-  material_system.cpp
-  vk_shaders.h
-  vk_shaders.cpp
-  bindless_manager.h
-  bindless_manager.cpp
-  logger.h
-  cvars.h
-  cvars.cpp
-  camera.cpp
-  camera.h
+file(GLOB_RECURSE ENGINE_SOURCES
+    CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.cpp"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.h"
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
 )
+
+add_executable(engine ${ENGINE_SOURCES})
+
+file(GLOB_RECURSE ALL_HEADERS CONFIGURE_DEPENDS 
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.h" 
+    "${CMAKE_CURRENT_SOURCE_DIR}/*.hpp"
+)
+
+set(HEADER_DIRS "")
+foreach(HEADER_PATH ${ALL_HEADERS})
+    get_filename_component(HEADER_DIR "${HEADER_PATH}" DIRECTORY)
+    list(APPEND HEADER_DIRS "${HEADER_DIR}")
+endforeach()
+
+if(HEADER_DIRS)
+    list(REMOVE_DUPLICATES HEADER_DIRS)
+    target_include_directories(engine PRIVATE ${HEADER_DIRS})
+endif()
+
+add_dependencies(engine Shaders)
 
 set_property(TARGET engine PROPERTY CXX_STANDARD 20)
 target_compile_definitions(engine PUBLIC GLM_FORCE_DEPTH_ZERO_TO_ONE)

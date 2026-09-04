@@ -1,6 +1,4 @@
-﻿// vulkan_guide.h : Include file for standard system include files,
-// or project specific include files.
-#pragma once
+﻿#pragma once
 
 #include <memory>
 #include <optional>
@@ -67,7 +65,7 @@ struct GPUDrawPushConstants
     glm::mat4 worldMatrix;
     VkDeviceAddress vertexBufferAddress;
     VkDeviceAddress materialBufferAddress;
-    uint32_t albedoTexIndex;
+    uint32_t colorTexIndex;
     uint32_t metalRoughTexIndex;
     uint32_t shadowmapTexIndex;
 };
@@ -85,11 +83,17 @@ struct MaterialPipeline
     VkPipelineLayout layout;
 };
 
-struct MaterialInstance {
+// Unified Material struct
+struct Material {
     std::string name;
-    MaterialPipeline* pipeline;
+    MaterialPipeline* pipeline{ nullptr };
     MaterialPass passType{ MaterialPass::MainColor };
+
+    // Kept for direct shader block alignment inside GPUDrawPushConstants
     VkDeviceAddress materialBufferAddress{ 0 };
+
+    // The material slot position inside the global system buffer [4]
+    uint32_t globalMaterialIndex{ 0xFFFFFFFF };
 
     // [0] = Albedo/Diffuse, [1] = MetalRough, [2] = Normal, etc.
     std::vector<uint32_t> textureIndices;
@@ -108,7 +112,7 @@ struct Bounds
 
 struct RenderObject
 {
-    MaterialInstance* material{ nullptr };
+    Material* material{ nullptr };
     VkBuffer indexBuffer{ VK_NULL_HANDLE };
     uint32_t indexCount{ 0 };
     uint32_t firstIndex{ 0 };
@@ -145,34 +149,3 @@ struct Node : public IRenderable
             c->Draw(topMatrix, ctx);
     }
 };
-
-struct AllocatedBufferUntyped {
-    VkBuffer _buffer{};
-    VmaAllocation _allocation{};
-    VkDeviceSize _size{ 0 };
-    VkDescriptorBufferInfo get_info(VkDeviceSize offset = 0);
-};
-
-//template<typename T>
-//struct AllocatedBuffer : public AllocatedBufferUntyped {
-//    void operator=(const AllocatedBufferUntyped& other) {
-//        _buffer = other._buffer;
-//        _allocation = other._allocation;
-//        _size = other._size;
-//    }
-//    AllocatedBuffer(AllocatedBufferUntyped& other) {
-//        _buffer = other._buffer;
-//        _allocation = other._allocation;
-//        _size = other._size;
-//    }
-//    AllocatedBuffer() = default;
-//};
-//
-inline VkDescriptorBufferInfo AllocatedBufferUntyped::get_info(VkDeviceSize offset)
-{
-    VkDescriptorBufferInfo info;
-    info.buffer = _buffer;
-    info.offset = offset;
-    info.range = _size;
-    return info;
-}

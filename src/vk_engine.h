@@ -11,6 +11,11 @@
 
 #include "bindless_manager.h"
 #include "material_system.h"
+#include "culling_system.h"
+#include "render_pass.h"
+
+class GeometryPass;
+class ShadowPass;
 
 struct DeletionQueue
 {
@@ -154,12 +159,8 @@ public:
 	// descriptor
 	DescriptorAllocatorGrowable globalDescriptorAllocator;
 
-	VkDescriptorSet _drawImageDescriptors;
-	VkDescriptorSetLayout _drawImageDescriptorLayout;
-
 	GPUSceneData sceneData;
 	VkDescriptorSetLayout _gpuSceneDataDescriptorLayout;
-	VkDescriptorSetLayout _singleImageDescriptorLayout;
 
 	// immediate submit structures
 	VkFence _immFence;
@@ -170,23 +171,6 @@ public:
 
 	// background
 	void draw_background(VkCommandBuffer cmd);
-
-	// shadows
-	struct ShadowPushConstants {
-		glm::mat4 lightMVP;
-		VkDeviceAddress vertexBufferAddress;
-	};
-
-	VkPipeline _shadowPipeline{ VK_NULL_HANDLE };
-	VkPipelineLayout _shadowPipelineLayout{ VK_NULL_HANDLE };
-	int _shadowmapTexIndex{ -1 };
-	VkExtent2D _shadowmapExtent{ 512 , 512 };
-	AllocatedImage _shadowmap;
-	VkSampler _shadowSampler;
-	void init_shadowmap();
-	void init_shadow_pipeline();
-
-	void draw_shadowmap(VkCommandBuffer cmd);
 
 	// actual scene
 	void init_scene_pipelines();
@@ -213,7 +197,7 @@ public:
 	VkSampler _defaultSamplerLinear;
 	VkSampler _defaultSamplerNearest;
 
-	MaterialInstance defaultData;
+	Material defaultData;
 
 	// node architecture
 	DrawContext mainDrawContext;
@@ -222,10 +206,10 @@ public:
 
 	void update_scene();
 
-	// camera
 	Camera mainCamera;
 
-	// engine stats
+	CullingSystem cullingSystem;
+
 	EngineStats stats;
 
 	// shader loader
@@ -238,6 +222,12 @@ public:
 
 	// material system
 	MaterialSystem _materialSystem;
+
+	// render pass system
+	GeometryPass* _geometryPass;
+	ShadowPass* _shadowPass;
+
+	RenderPassManager _renderPassManager;
 
 private:
 	void init_vulkan();
@@ -260,4 +250,6 @@ private:
 	void init_pipelines();
 
 	void init_default_data();
+
+	void init_render_passes();
 };
