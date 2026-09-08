@@ -103,11 +103,9 @@ struct Material {
     }
 };
 
-struct Bounds
-{
-    glm::vec3 origin;
-    float sphereRadius;
-    glm::vec3 extents;
+struct Bounds {
+    glm::vec4 origin_radius;
+    glm::vec4 extents;
 };
 
 struct RenderObject

@@ -182,7 +182,7 @@ public:
 	GPUMeshBuffers rectangle;
 
 	// mesh buffers
-	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage);
+	AllocatedBuffer create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, VmaAllocatorCreateFlags allocFlags = VMA_ALLOCATION_CREATE_MAPPED_BIT);
 	void destroy_buffer(const AllocatedBuffer& buffer);
 	GPUMeshBuffers uploadMesh(std::span<uint32_t> indices, std::span<Vertex> vertices);
 
@@ -228,6 +228,13 @@ public:
 	ShadowPass* _shadowPass;
 
 	RenderPassManager _renderPassManager;
+
+	// for compute
+	VkQueue _computeQueue;
+	uint32_t _computeQueueFamily;
+	VkFence _computeFence;
+	VkCommandPool _computeCommandPool;
+	VkCommandBuffer _computeCommandBuffer;
 
 private:
 	void init_vulkan();

@@ -338,9 +338,11 @@ std::optional<std::shared_ptr<LoadedGLTF>> loadGltf(VulkanEngine* engine, std::s
                 minPos = glm::min(minPos, vertices[i].position);
                 maxPos = glm::max(maxPos, vertices[i].position);
             }
-            newSurface.bounds.origin = (minPos + maxPos) / 2.f;
-            newSurface.bounds.extents = (maxPos - minPos) / 2.f;
-            newSurface.bounds.sphereRadius = glm::length(newSurface.bounds.extents);
+            glm::vec3 origin3D = (minPos + maxPos) / 2.f;
+            glm::vec3 extents3D = (maxPos - minPos) / 2.f;
+            float sphereRadius = glm::length(extents3D);
+            newSurface.bounds.origin_radius = glm::vec4(origin3D, sphereRadius);
+            newSurface.bounds.extents = glm::vec4(extents3D, 0.0f);
 
             newMesh->surfaces.push_back(newSurface);
         }

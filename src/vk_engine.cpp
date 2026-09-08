@@ -68,24 +68,27 @@ void VulkanEngine::init()
     std::string vulkanscenemodelPath{ "../../assets/samplescene.gltf" };
     std::string vulkanscenemodelshadowsPath{ "../../assets/vulkanscene_shadow.gltf" };
     std::string shadowtestPath{ "../../assets/shadow_test.glb" };
-    //std::string structurePath{ "../../assets/structure.glb" };
+    std::string structurePath{ "../../assets/structure.glb" };
 
     auto vulkanscenemodelFile{ loadGltf(this, vulkanscenemodelPath) };
     auto vulkanscenemodelshadowsFile{ loadGltf(this, vulkanscenemodelshadowsPath) };
     auto shadowtestFile{ loadGltf(this, shadowtestPath) };
-    //auto structureFile{ loadGltf(this, structurePath) };
+    auto structureFile{ loadGltf(this, structurePath) };
 
     assert(vulkanscenemodelFile.has_value());
     assert(vulkanscenemodelshadowsFile.has_value());
     assert(shadowtestFile.has_value());
-    //assert(structureFile.has_value());
+    assert(structureFile.has_value());
 
     loadedScenes["samplescene"] = vulkanscenemodelFile.value();
     loadedScenes["vulkansceneshadow"] = vulkanscenemodelshadowsFile.value();
     loadedScenes["shadowtest"] = shadowtestFile.value();
-    //loadedScenes["structure"] = structureFile.value();
+    loadedScenes["structure"] = structureFile.value();
 
     init_scene_pipelines();
+
+    // culling system
+    cullingSystem.init(this);
 
     // everything went fine
     _isInitialized = true;
@@ -142,6 +145,7 @@ void VulkanEngine::init_vulkan()
         .set_required_features_13(features)
         .set_required_features_12(features12)
         .set_surface(_surface)
+        .require_separate_compute_queue()
         .select()
         .value()
     };
@@ -157,6 +161,9 @@ void VulkanEngine::init_vulkan()
     // use vkbootstrap to get a Graphics queue
     _graphicsQueue = vkbDevice.get_queue(vkb::QueueType::graphics).value();
     _graphicsQueueFamily = vkbDevice.get_queue_index(vkb::QueueType::graphics).value();
+    // compute queue
+    _computeQueue = _graphicsQueue;
+    _computeQueueFamily = _graphicsQueueFamily;
 
     // initialize the memory allocator
     VmaAllocatorCreateInfo allocatorInfo{};
@@ -377,6 +384,25 @@ void VulkanEngine::init_commands()
     commandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
     commandPoolInfo.queueFamilyIndex = _graphicsQueueFamily;
 
+    // compute
+    VkCommandPoolCreateInfo computeCommandPoolInfo{ .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO, .pNext = nullptr };
+    computeCommandPoolInfo.flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT;
+    computeCommandPoolInfo.queueFamilyIndex = _computeQueueFamily;
+
+    VK_CHECK(vkCreateCommandPool(_device, &computeCommandPoolInfo, nullptr, &_computeCommandPool));
+
+    VkCommandBufferAllocateInfo cmdAlocInfo{};
+    cmdAlocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    cmdAlocInfo.pNext = nullptr;
+    cmdAlocInfo.commandPool = _computeCommandPool;
+    cmdAlocInfo.commandBufferCount = 1;
+    cmdAlocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+
+    VK_CHECK(vkAllocateCommandBuffers(_device, &cmdAlocInfo, &_computeCommandBuffer));
+    _mainDeletionQueue.push_function([&]() {
+        vkDestroyCommandPool(_device, _computeCommandPool, nullptr);
+    });
+
     for (int i = 0; i < FRAME_OVERLAP; i++)
     {
         VK_CHECK(vkCreateCommandPool(_device, &commandPoolInfo, nullptr, &_frames[i]._commandPool));
@@ -452,6 +478,12 @@ void VulkanEngine::init_sync_structures()
     VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_immFence));
     _mainDeletionQueue.push_function([&]() {
         vkDestroyFence(_device, _immFence, nullptr);
+    });
+
+    // for compute commands (culling)
+    VK_CHECK(vkCreateFence(_device, &fenceCreateInfo, nullptr, &_computeFence));
+    _mainDeletionQueue.push_function([&]() {
+        vkDestroyFence(_device, _computeFence, nullptr);
     });
 }
 
@@ -697,8 +729,13 @@ void VulkanEngine::update_scene()
 
     mainDrawContext.OpaqueSurfaces.clear();
     mainDrawContext.TransparentSurfaces.clear();
-    loadedScenes["vulkansceneshadow"]->Draw(glm::mat4{ 1.f }, mainDrawContext);
-    loadedScenes["samplescene"]->Draw(glm::mat4{ 1.f }, mainDrawContext);
+    //loadedScenes["vulkansceneshadow"]->Draw(glm::mat4{ 1.f }, mainDrawContext);
+    //loadedScenes["samplescene"]->Draw(glm::mat4{ 1.f }, mainDrawContext);
+     
+    loadedScenes["structure"]->Draw(glm::mat4{ 1.f }, mainDrawContext);
+    loadedScenes["structure"]->Draw(glm::translate(glm::vec3(1.f) * 100.f) * glm::mat4{ 1.f }, mainDrawContext);
+    loadedScenes["structure"]->Draw(glm::translate(glm::vec3(1.f) * 200.f) * glm::mat4{ 1.f }, mainDrawContext);
+    loadedScenes["structure"]->Draw(glm::translate(glm::vec3(1.f) * 300.f) * glm::mat4{ 1.f }, mainDrawContext);
 
     //loadedScenes["shadowtest"]->Draw(glm::mat4{ 1.f }, mainDrawContext);
     //loadedScenes["shadowtest"]->Draw(glm::translate(glm::vec3(1.f) * 5.f) * glm::mat4{ 1.f }, mainDrawContext);
@@ -777,6 +814,18 @@ void VulkanEngine::draw()
 {
     update_scene();
 
+    // first use compute culling
+    auto mainCameraVisible{ cullingSystem.cullScene(mainDrawContext.OpaqueSurfaces, sceneData.viewproj) };
+    auto lightCameraVisible{ cullingSystem.cullScene(mainDrawContext.OpaqueSurfaces, sceneData.lightSpaceMatrix) };
+
+    auto sortLamb = [](const RenderObject* a, const RenderObject* b) {
+        if (a->material->pipeline != b->material->pipeline)
+            return a->material->pipeline < b->material->pipeline;
+        return a->indexBuffer < b->indexBuffer;
+        };
+    sort(mainCameraVisible.begin(), mainCameraVisible.end(), sortLamb);
+    sort(lightCameraVisible.begin(), lightCameraVisible.end(), sortLamb);
+
     VK_CHECK(vkWaitForFences(_device, 1, &get_current_frame()._renderFence, true, 1000000000));
 
     get_current_frame()._deletionQueue.flush();
@@ -788,7 +837,7 @@ void VulkanEngine::draw()
     uint32_t swapchainImageIndex;
     VK_CHECK(vkAcquireNextImageKHR(_device, _swapchain, 1000000000, get_current_frame()._swapchainSemaphore, nullptr, &swapchainImageIndex));
 
-    // this is a pointer so we can just pass by value
+    // then switch to main command buffer
     VkCommandBuffer cmd{ get_current_frame()._mainCommandBuffer };
 
     VK_CHECK(vkResetCommandBuffer(cmd, 0));
@@ -798,18 +847,6 @@ void VulkanEngine::draw()
 
     _drawExtent.width = std::min(_swapchainExtent.width, _drawImage.imageExtent.width) * renderScale;
     _drawExtent.height = std::min(_swapchainExtent.height, _drawImage.imageExtent.height) * renderScale;
-
-    // cull scene
-    std::vector<const RenderObject*> mainCameraVisible{ cullingSystem.cullScene(mainDrawContext.OpaqueSurfaces, sceneData.viewproj) };
-    std::vector<const RenderObject*> lightCameraVisible{ cullingSystem.cullScene(mainDrawContext.OpaqueSurfaces, sceneData.lightSpaceMatrix) };
-
-    auto sortLamb = [](const RenderObject* a, const RenderObject* b) {
-        if (a->material->pipeline != b->material->pipeline)
-            return a->material->pipeline < b->material->pipeline;
-        return a->indexBuffer < b->indexBuffer;
-    };
-    sort(mainCameraVisible.begin(), mainCameraVisible.end(), sortLamb);
-    sort(lightCameraVisible.begin(), lightCameraVisible.end(), sortLamb);
 
     // render passes
     stats.drawcall_count = stats.triangle_count = 0;
@@ -846,7 +883,7 @@ void VulkanEngine::draw()
 
     VkCommandBufferSubmitInfo cmdinfo{ vkinit::command_buffer_submit_info(cmd) };
 
-    //"wait" for the swapchain to be ready
+    //"wait" for the swapchain to be ready (signaled)
     //"signal" when finished rendering
     VkSemaphoreSubmitInfo waitInfo{ vkinit::semaphore_submit_info(0, get_current_frame()._swapchainSemaphore)};
     VkSemaphoreSubmitInfo signalInfo{ vkinit::semaphore_submit_info(0, _renderSemaphores[swapchainImageIndex])};
@@ -965,7 +1002,7 @@ void VulkanEngine::run()
     }
 }
 
-AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage)
+AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags usage, VmaMemoryUsage memoryUsage, VmaAllocationCreateFlags allocFlags)
 {
     VkBufferCreateInfo bufferInfo{ .sType = VK_STRUCTURE_TYPE_BUFFER_CREATE_INFO, .pNext = nullptr };
     bufferInfo.usage = usage;
@@ -973,7 +1010,7 @@ AllocatedBuffer VulkanEngine::create_buffer(size_t allocSize, VkBufferUsageFlags
 
     VmaAllocationCreateInfo allocInfo{};
     allocInfo.usage = memoryUsage;
-    allocInfo.flags = VMA_ALLOCATION_CREATE_MAPPED_BIT;
+    allocInfo.flags = allocFlags;
 
     AllocatedBuffer newBuffer;
     VK_CHECK(vmaCreateBuffer(_allocator, &bufferInfo, &allocInfo, &newBuffer.buffer, &newBuffer.allocation, &newBuffer.info));

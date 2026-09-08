@@ -1,6 +1,8 @@
 ﻿#pragma once 
 #include <vk_types.h>
 
+struct ShaderEffect;
+
 class PipelineBuilder
 {
 public:
@@ -21,7 +23,7 @@ public:
 
 	VkPipeline build_pipeline(VkDevice device);
 	void set_shaders(VkShaderModule vertexShader, VkShaderModule fragmentShader);
-	void set_shaders(struct ShaderEffect* shaderEffect);
+	void set_shaders(ShaderEffect* shaderEffect);
 	void set_input_topology(VkPrimitiveTopology topology);
 	void set_polygon_mode(VkPolygonMode mode);
 	void set_cull_mode(VkCullModeFlags cullMode, VkFrontFace frontFace);

@@ -25,7 +25,7 @@ namespace vkutil {
 class VulkanEngine;
 
 //holds all information for a given shader set for pipeline
-class ShaderEffect {
+struct ShaderEffect {
 public:
     struct ReflectionOverrides {
         const char* name;
